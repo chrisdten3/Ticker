@@ -1,0 +1,6 @@
+praw
+datetime
+newsapi
+joblib
+transformers
+torch
