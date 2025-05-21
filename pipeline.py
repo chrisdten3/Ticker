@@ -8,14 +8,26 @@ import torch
 import openai
 import time
 import os
+from supabase import create_client, Client
+from dotenv import load_dotenv
+import os
+import openai
 
-client = openai.OpenAI(api_key=os.getenv("open_api_key"))
+load_dotenv()
+
+
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 tokenizer = AutoTokenizer.from_pretrained("yiyanghkust/finbert-tone")
 model = AutoModel.from_pretrained("yiyanghkust/finbert-tone")
 #newsapi = NewsApiClient(api_key=os.getenv("newsapi_client_id"))
 reddit = praw.Reddit(
-    client_id=os.getenv(os.getenv('reddit_client_id')),
-    client_secret=os.getenv('reddit_secret_key'),
+    client_id=os.getenv('REDDIT_CLIENT_ID'),           
+    client_secret=os.getenv('REDDIT_SECRET_KEY'),
     user_agent='StockScraper/1.0'
 )
 
@@ -103,6 +115,20 @@ def fetch_news_and_reddit():
     all_posts = reddit_posts 
     return all_posts
 
+def insert_prediction(post, label):
+    try: 
+        response = supabase.table("predictions").upsert({
+            "date": post["created"].split(" ")[0],
+            "tickers": post.get("tickers", []),
+            "title": post["title"],
+            "text": post["text"],
+            "url": post["url"],
+            "label": label
+        }, on_conflict=["url"]).execute()
+    except Exception as e:
+        print(f"Error inserting prediction: {e}")
+
+
 
 def run_pipeline():
     print("Fetching news and Reddit posts...")
@@ -122,6 +148,10 @@ def run_pipeline():
         print(f"Processing post: {post['title']}")
         emb = get_embedding(post["text"])
         label = lr.predict([emb])[0]
-        results.append({"post": post, "label": int(label)})
+        insert_prediction(post, int(label))
 
-    return results
+if __name__ == "__main__":
+    results = run_pipeline()
+
+
+
